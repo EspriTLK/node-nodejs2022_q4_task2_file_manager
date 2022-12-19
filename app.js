@@ -1,17 +1,19 @@
-import { homedir } from 'node:os';
-import { createReadStream } from 'node:fs';
+import { homedir, EOL, cpus, arch, userInfo } from 'node:os';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { sayHi, sayBy } from './src/greets.js'
 import { getArgs } from './src/getArgs.js'
 import { getParams } from './src/getParams.js'
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import readline from 'node:readline';
 import { up, cd, ls } from './src/nwd/navigation.js';
-// import { fileToRead as cat } from './src/fs/cat.js'
+import { fileRename } from './src/fs/rn.js'
+import { fileCopy } from './src/fs/cp.js'
 import { availableCommands as ac } from './src/libs/comands/checker.js'
 import { checkPath } from './src/libs/fs/pathChecker.js'
+import { calculateHash } from './src/hash/calcHash.js'
 import path from 'node:path'
-import { writeFile } from 'node:fs/promises';
-// import { Worker } from 'node:worker_threads'
+import { writeFile, rm } from 'node:fs/promises';
+import { compress, decompress } from './src/zip/zip.js'; 
 
 const _path = new URL('src', import.meta.url)
 const file = fileURLToPath(`${_path}${path.sep}commands.js`)
@@ -29,9 +31,6 @@ const runApp = async () => {
 	// console.log(`You are currently in ${currenDir}`)
 	// console.log(`${userName} input command: `)
 
-	// const comChPr = fork(file, argv, {silent: true})
-	// process.stdin.pipe(comChPr.stdin)
-	// comChPr.stdout.pipe(process.stdout)
 	
 		let rl = readline.createInterface({
 			input: process.stdin,
@@ -83,7 +82,6 @@ const runApp = async () => {
 							const listDir = async (dstPath) => {
 								try {
 									const { status, message } = await ls(dstPath)
-									// console.log(status, message)
 									if(status !== false){
 										console.table(message.slice().sort((x, y) => x.type.localeCompare(y.type)))
 									} else {
@@ -93,9 +91,7 @@ const runApp = async () => {
 
 									process.stdout.write(`Operation failed ${err.message.slice(err.message.indexOf(':')+1)}\n`)
 								}
-								// const { status, err } = await ls(dstPath)
-								// }
-								// 
+								
 								await process.stdout.write(`You are currently in ${currenDir}\n${userName} input your command: `)
 								// 	rl.prompt()
 							}
@@ -103,10 +99,10 @@ const runApp = async () => {
 							listDir(currenDir)
 							// rl.prompt()
 						break
-							// default:
-							// // 	process.stdout.write(`Invalid input\n`);
+						
 						case 'cat':
 							const readedFile = getParams(line)['cat']
+							if(typeof readedFile === 'string'){
 							const fileToRead = async(filePath, curPath) => {
 								const fullFilePath = await checkPath(filePath, curPath)
 								const readStream = createReadStream(fullFilePath)
@@ -136,6 +132,9 @@ const runApp = async () => {
 								// rl.prompt()
 							}
 							fileToRead(readedFile, currenDir)
+							} else {
+								console.log(`invalid input`)
+							}
 							process.stdout.write(`\nYou are currently in ${currenDir}\n${userName} input your command: `)
 							break
 
@@ -144,12 +143,10 @@ const runApp = async () => {
 							const addedFileName = getParams(line)['add']
 
 							const createFile = async(fileName, filePath) => {
-								// console.log(fileName)
 								try {
 									const newFile = await writeFile(path.join(filePath, fileName), '', {flag: 'wx'})
 									process.stdout.write (`${fileName} create successfully\n`)
 								} catch (err) {
-									// console.error(err.message)
 									if(err.code === 'EEXIST'){
 										process.stdout.write (`operation failed${err.message.slice(err.message.indexOf(':')+1)}\n`)}
 									else {
@@ -160,6 +157,153 @@ const runApp = async () => {
 								createFile(addedFileName, currenDir)
 								// rl.prompt()
 								break
+							case 'rn':
+								const paths = getParams(line)['rn']
+								if (!(paths instanceof Array) || paths.length === 0) {
+									console.log (`invalid input`)
+								}
+								const [ originalPath, newPath ] = paths
+								const renameFunction = async () => {
+									try {
+										await fileRename(originalPath, newPath, currenDir)
+									} catch (err) {
+										console.log (err.message)
+									}
+								}
+								renameFunction()
+								process.stdout.write(`You are currently in ${currenDir}\n${userName} input your command: `)
+								break
+							case 'cp':
+								{if (!(getParams(line)['cp'] instanceof Array) || getParams(line)['cp'].length === 0) {
+									console.log (`invalid input`)
+								} 
+								let [srcPaths, newFilePath ] = getParams(line)['cp']
+								console.log()
+								const cp = async () => {
+
+									try {
+										await fileCopy(srcPaths, newFilePath, currenDir)
+									} catch (err){
+										console.log (`operation failed: ${err.message}`)
+									}
+									await process.stdout.write(`You are currently in ${currenDir}\n${userName} input your command: `)
+								}
+
+									cp()
+								break}
+							case 'mv':
+								if (!(getParams(line)['mv'] instanceof Array) || getParams(line)['mv'].length === 0) {
+									console.log (`invalid input`)
+								}
+								let [srcPath, fileNewPath ] = getParams(line)['mv']
+								console.log()
+								const mv = async () => {
+
+									try {
+										await fileCopy(srcPath, fileNewPath, currenDir)
+										const remFile = await checkPath(srcPath, currenDir)
+										await rm(remFile)
+									} catch (err){
+										console.log (`operation failed: ${err.message}`)
+									}
+									await process.stdout.write(`You are currently in ${currenDir}\n${userName} input your command: `)
+								}
+
+									mv()
+								break
+							case 'rm': 
+								const removeFilePath = getParams(line)['rm']
+								const removeFile = async () => {
+									const fileToRemove = await checkPath(removeFilePath, currenDir)
+									try {
+										await rm(fileToRemove)
+										console.log(`file ${path.basename(fileToRemove)} removed successful`)
+									} catch (err) {
+										console.log (`operation failed: ${err.message}`)
+									}
+									await process.stdout.write(`You are currently in ${currenDir}\n${userName} input your command: `)
+								}
+								removeFile()
+								break
+							case 'os':
+								{
+									const params = getParams(line)['os']
+									if(!(params.startsWith('--'))){
+										console.log(`Invalid Input`)
+									} 
+									if(params === '--EOL') {
+										console.log(`EOL: ${JSON.stringify(EOL)}`)
+									} else if(params === '--cpus') {
+										let hostCpus = {}
+										cpus().forEach( (item, index) => {
+										hostCpus[index] = {model: item.model, 'clock rate': (item.speed/1024).toFixed(1) + ' GHz'}
+										})
+
+										console.log(`Total cores of CPUs is: ${cpus().length}`)
+										console.table(hostCpus)
+									} else if(params === '--username') {
+										console.log(userInfo().username)
+									} else if(params === '--architecture') {
+										console.log(arch())
+									} else if(params === '--homedir') {
+										console.log(homedir())
+									}
+									process.stdout.write(`You are currently in ${currenDir}\n${userName} input your command: `)
+								}
+							case 'hash': {
+								const params = getParams(line)['hash']
+								if(typeof(params) !== 'string') {
+									console.log(`Invalid input`)
+								}
+								const calcHash = async () => {
+									try {
+										await calculateHash(params, currenDir)
+									} catch (err) {
+										console.log(`operation failed: ${err.message}`)
+									}
+									await process.stdout.write(`You are currently in ${currenDir}\n${userName} input your command: `)
+								}
+								calcHash()
+								break
+							}
+							case 'compress': {
+								const paths = getParams(line)['compress']
+								if (!(paths instanceof Array) || paths.length === 0) {
+									console.log (`invalid input`)
+								} 
+								
+								const [ originalPath, newPath ] = paths
+
+								const fileCompress = async () => {
+									try {
+										await compress(originalPath, newPath, currenDir)
+									} catch (err) {
+										console.log(`operation failed: ${err.message}`)
+									}
+									await process.stdout.write(`You are currently in ${currenDir}\n${userName} input your command: `)
+								}
+								fileCompress()
+								break
+							}
+							case 'decompress': {
+								const paths = getParams(line)['decompress']
+								if (!(paths instanceof Array) || paths.length === 0) {
+									console.log (`invalid input`)
+								} 
+								
+								const [ originalPath, newPath ] = paths
+
+								const fileDecompress = async () => {
+									try {
+										await decompress(originalPath, newPath, currenDir)
+									} catch (err) {
+										console.log(`operation failed: ${err.message}`)
+									}
+									await process.stdout.write(`You are currently in ${currenDir}\n${userName} input your command: `)
+								}
+								fileDecompress()
+								break
+							}
 							}
 		}
 		})

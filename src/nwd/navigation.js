@@ -65,4 +65,4 @@ export const ls = async(curPath) => {
 	// console.table(list.slice().sort((x, y) => x.type.localeCompare(y.type)))
 }
 
-ls('/home')
+// ls('/home')
