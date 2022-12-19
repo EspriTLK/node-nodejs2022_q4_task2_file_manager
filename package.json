@@ -1,0 +1,13 @@
+{
+  "name": "cli_file_manager",
+  "version": "1.0.0",
+  "description": "Task2_rsschool_nodejs_q4",
+  "type": "module",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js"
+  },
+  "author": "L.Kazakevich",
+  "license": "ISC"
+}
